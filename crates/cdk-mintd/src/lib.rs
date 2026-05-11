@@ -574,23 +574,27 @@ async fn configure_lightning_backend(
                 let fake_wallet = settings.clone().fake_wallet.expect("Fake wallet defined");
                 tracing::info!("Using fake wallet: {:?}", fake_wallet);
 
-                for unit in fake_wallet.clone().supported_units {
-                    let fake = fake_wallet
-                        .setup(settings, unit.clone(), None, work_dir, _kv_store.clone())
-                        .await?;
-                    #[cfg(feature = "prometheus")]
-                    let fake = MetricsMintPayment::new(fake);
-
-                    mint_builder = configure_backend_for_unit(
+                let fake = fake_wallet
+                    .setup(
                         settings,
-                        mint_builder,
-                        unit.clone(),
-                        mint_melt_limits,
-                        Arc::new(fake),
-                        &mut seen,
+                        ln_entry.unit.clone(),
+                        None,
+                        work_dir,
+                        _kv_store.clone(),
                     )
                     .await?;
-                }
+                #[cfg(feature = "prometheus")]
+                let fake = MetricsMintPayment::new(fake);
+
+                mint_builder = configure_backend_for_unit(
+                    settings,
+                    mint_builder,
+                    ln_entry.unit.clone(),
+                    mint_melt_limits,
+                    Arc::new(fake),
+                    &mut seen,
+                )
+                .await?;
 
                 for rotation_cfg in &fake_wallet.keyset_rotations {
                     use cdk::mint::KeysetRotation;
@@ -619,29 +623,27 @@ async fn configure_lightning_backend(
                     .expect("grpc processor config defined");
 
                 tracing::info!(
-                    "Attempting to start with gRPC payment processor at {}:{}.",
+                    "Attempting to start with gRPC payment processor at {}:{} for unit {:?}.",
                     grpc_processor.addr,
-                    grpc_processor.port
+                    grpc_processor.port,
+                    ln_entry.unit
                 );
 
-                for unit in grpc_processor.clone().supported_units {
-                    tracing::debug!("Adding unit: {:?}", unit);
-                    let processor = grpc_processor
-                        .setup(settings, unit.clone(), None, work_dir, None)
-                        .await?;
-                    #[cfg(feature = "prometheus")]
-                    let processor = MetricsMintPayment::new(processor);
-
-                    mint_builder = configure_backend_for_unit(
-                        settings,
-                        mint_builder,
-                        unit.clone(),
-                        mint_melt_limits,
-                        Arc::new(processor),
-                        &mut seen,
-                    )
+                let processor = grpc_processor
+                    .setup(settings, ln_entry.unit.clone(), None, work_dir, None)
                     .await?;
-                }
+                #[cfg(feature = "prometheus")]
+                let processor = MetricsMintPayment::new(processor);
+
+                mint_builder = configure_backend_for_unit(
+                    settings,
+                    mint_builder,
+                    ln_entry.unit.clone(),
+                    mint_melt_limits,
+                    Arc::new(processor),
+                    &mut seen,
+                )
+                .await?;
             }
             #[cfg(feature = "ldk-node")]
             LnBackend::LdkNode => {
