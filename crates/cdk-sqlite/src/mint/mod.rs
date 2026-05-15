@@ -16,6 +16,7 @@ pub type MintSqliteAuthDatabase = SQLMintAuthDatabase<SqliteConnectionManager>;
 #[cfg(test)]
 mod test {
     use std::fs::remove_file;
+    use std::time::Duration;
 
     use cdk_common::mint_db_test;
     use cdk_sql_common::pool::Pool;
@@ -35,9 +36,20 @@ mod test {
         let config: Config = "test.db".into();
 
         let pool = Pool::<SqliteConnectionManager>::new(config);
-        let db = pool.get();
+        let db = pool.get().await;
         assert!(db.is_ok());
         let _ = remove_file("test.db");
+    }
+
+    #[tokio::test]
+    async fn exhausted_in_memory_pool_times_out() {
+        let config: Config = ":memory:".into();
+        let pool = Pool::<SqliteConnectionManager>::new(config);
+
+        let _conn = pool.get().await.expect("valid connection");
+        let result = pool.get_timeout(Duration::from_millis(10)).await;
+
+        assert!(matches!(result, Err(cdk_sql_common::pool::Error::Timeout)));
     }
 
     #[tokio::test]
@@ -56,7 +68,7 @@ mod test {
 
             let pool = Pool::<SqliteConnectionManager>::new(config);
 
-            let conn = pool.get().expect("valid connection");
+            let conn = pool.get().await.expect("valid connection");
 
             query(include_str!("../../tests/legacy-sqlx.sql"))
                 .expect("query")
