@@ -179,11 +179,24 @@ pub struct Ln {
     pub ln_backend: LnBackend,
     #[serde(default)]
     pub unit: CurrencyUnit,
+    #[serde(default)]
     pub invoice_description: Option<String>,
+    #[serde(default = "default_ln_min")]
     pub min_mint: Amount,
+    #[serde(default = "default_ln_max")]
     pub max_mint: Amount,
+    #[serde(default = "default_ln_min")]
     pub min_melt: Amount,
+    #[serde(default = "default_ln_max")]
     pub max_melt: Amount,
+}
+
+fn default_ln_min() -> Amount {
+    1.into()
+}
+
+fn default_ln_max() -> Amount {
+    500_000.into()
 }
 
 impl Default for Ln {
@@ -458,8 +471,11 @@ fn default_keyset_version() -> String {
 #[cfg(feature = "fakewallet")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FakeWallet {
+    #[serde(default = "default_fake_wallet_supported_units")]
     pub supported_units: Vec<CurrencyUnit>,
+    #[serde(default = "default_fake_wallet_fee_percent")]
     pub fee_percent: f32,
+    #[serde(default = "default_fake_wallet_reserve_fee_min")]
     pub reserve_fee_min: Amount,
     #[serde(default = "default_min_delay_time")]
     pub min_delay_time: u64,
@@ -493,6 +509,21 @@ fn default_fee_percent() -> f32 {
 
 #[cfg(any(feature = "cln", feature = "lnbits", feature = "lnd"))]
 fn default_reserve_fee_min() -> Amount {
+    2.into()
+}
+
+#[cfg(feature = "fakewallet")]
+fn default_fake_wallet_supported_units() -> Vec<CurrencyUnit> {
+    vec![CurrencyUnit::Sat]
+}
+
+#[cfg(feature = "fakewallet")]
+fn default_fake_wallet_fee_percent() -> f32 {
+    0.02
+}
+
+#[cfg(feature = "fakewallet")]
+fn default_fake_wallet_reserve_fee_min() -> Amount {
     2.into()
 }
 
@@ -951,6 +982,22 @@ max_melt = 500000
         assert_eq!(settings.ln[0].unit, CurrencyUnit::Sat);
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[cfg(feature = "fakewallet")]
+    #[test]
+    fn test_example_config_loads() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("example.config.toml");
+        let settings = Settings::new_from_default(&Settings::default(), Some(&path))
+            .expect("example.config.toml must parse");
+        assert_eq!(
+            settings.ln.len(),
+            1,
+            "example.config.toml ln backend was dropped: {:?}",
+            settings.ln
+        );
+        assert_eq!(settings.ln[0].ln_backend, LnBackend::FakeWallet);
+        assert_eq!(settings.ln[0].unit, CurrencyUnit::Sat);
     }
 
     /// Test that configuration can be loaded purely from environment variables
